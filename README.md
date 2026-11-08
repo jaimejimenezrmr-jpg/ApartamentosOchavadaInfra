@@ -84,8 +84,11 @@ openssl rand -hex 32      # BEDS24_WEBHOOK_TOKEN
 
 Para crear el primer administrador, rellene `APP_BOOTSTRAP_ADMIN_*` en `backend.env`. Después:
 
+Compile y arranque con el script de despliegue (compila las imágenes de una en una, porque en un VPS de 4 GB
+compilarlas a la vez agota la memoria, y espera a que todo esté sano):
+
 ```bash
-docker compose up -d --build
+bash scripts/deploy.sh --no-pull
 ```
 
 ```bash
@@ -113,8 +116,11 @@ docker compose up -d backend
 Actualizar a una nueva versión del código (recompila y sustituye los contenedores; las migraciones se aplican solas):
 
 ```bash
-docker compose up -d --build
+bash scripts/deploy.sh
 ```
+
+Hace `git pull` de los tres repositorios (deben estar en el mismo directorio padre que este), compila y
+sustituye los contenedores; si un servicio no queda sano, se detiene y lo indica.
 
 Ver registros:
 

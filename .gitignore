@@ -4,3 +4,6 @@ backups/*
 !backups/.gitkeep
 secrets/*
 !secrets/.gitkeep
+
+# IDE
+.idea/
