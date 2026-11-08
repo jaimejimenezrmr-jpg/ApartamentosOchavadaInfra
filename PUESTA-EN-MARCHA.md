@@ -34,8 +34,9 @@ Tiempo estimado: 2–3 horas la primera vez (la emisión de certificados y la pr
 2. **OVHcloud**: cree la cuenta en https://www.ovhcloud.com/es-es/ (Mi cuenta → Crear una cuenta) con los datos
    fiscales del negocio, para que las facturas salgan a su nombre. Puede pedir verificar identidad y método de
    pago antes de activar el primer pedido. Active la verificación en dos pasos (Mi cuenta → Seguridad).
-3. **GitHub**: cree (o use) una cuenta y tres repositorios **privados**: `ochavada-backend`, `ochavada-front`,
-   `ochavada-infra`. Active la verificación en dos pasos.
+3. **GitHub**: la cuenta `jaimejimenezrmr-jpg` con los tres repositorios **privados** `ApartamentosOchavadaBackend`,
+   `ApartamentosOchavadaFront` y `ApartamentosOchavadaInfra` (ya creados y subidos). Active la verificación en dos
+   pasos y compruebe que los tres son privados (Settings → General → Danger Zone → visibilidad).
 4. **Stripe**: cuenta en https://dashboard.stripe.com. Para el entorno del equipo use **solo las claves de test**
    (`sk_test_…`, `pk_test_…`): se pueden probar reservas con tarjetas de prueba sin cobros reales.
 5. **Gmail**: en la cuenta de Google active la verificación en dos pasos y cree una **contraseña de aplicación**
@@ -156,23 +157,41 @@ los visitantes.
 
 ## Fase E · Código en el servidor
 
-1. En su ordenador, suba cada proyecto a su repositorio privado de GitHub (`git init`, `git add`, `git commit`,
-   `git remote add origin …`, `git push`). Compruebe que **no** se suben `.env`, `backend.env`, `backups/` ni
-   `secrets/` (los `.gitignore` ya los excluyen).
-2. En el servidor, una **deploy key** de solo lectura para clonar:
+Los tres repositorios privados ya están en GitHub (`jaimejimenezrmr-jpg/ApartamentosOchavadaBackend`,
+`…/ApartamentosOchavadaFront` y `…/ApartamentosOchavadaInfra`). El servidor los clona con **deploy keys** de solo
+lectura: si alguien entrara en el servidor, no podría modificar el código ni ver otros repositorios.
+
+1. **Una clave por repositorio** (GitHub no permite usar la misma deploy key en dos repositorios). En el servidor,
+   como `ochavada`:
    ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/github_ochavada -N "" -C "ochavada-prod"
-   cat ~/.ssh/github_ochavada.pub
+   for r in Backend Front Infra; do
+     ssh-keygen -t ed25519 -f ~/.ssh/deploy_${r,,} -N "" -C "ochavada-prod-${r,,}"
+     printf 'Host github-%s\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/deploy_%s\n  IdentitiesOnly yes\n\n' "${r,,}" "${r,,}" >> ~/.ssh/config
+     echo "=== ApartamentosOchavada$r"; cat ~/.ssh/deploy_${r,,}.pub
+   done
+   chmod 600 ~/.ssh/config
    ```
-   Añádala en GitHub a cada repositorio: Settings → Deploy keys → Add (sin permiso de escritura). Después:
+2. **Añada cada clave a su repositorio**: en GitHub, el repositorio → Settings → Deploy keys → **Add deploy key**.
+   Título `ochavada-prod`, pegue la línea `ssh-ed25519 …` que salió bajo su nombre y deje **sin marcar**
+   *Allow write access*. Repita en los tres.
+3. **Clone** los tres al mismo nivel (los nombres de carpeta son los que espera `scripts/deploy.sh`):
    ```bash
-   printf 'Host github.com\n  IdentityFile ~/.ssh/github_ochavada\n  IdentitiesOnly yes\n' >> ~/.ssh/config
    sudo mkdir -p /opt/ochavada && sudo chown ochavada:ochavada /opt/ochavada && cd /opt/ochavada
-   git clone git@github.com:<usuario>/ochavada-backend.git ApartamentosOchavadaBackend
-   git clone git@github.com:<usuario>/ochavada-front.git ApartamentosOchavadaFront
-   git clone git@github.com:<usuario>/ochavada-infra.git ApartamentosOchavadaInfra
    ```
-   Los tres directorios deben quedar al mismo nivel, con esos nombres exactos.
+   ```bash
+   git clone github-backend:jaimejimenezrmr-jpg/ApartamentosOchavadaBackend.git
+   ```
+   ```bash
+   git clone github-front:jaimejimenezrmr-jpg/ApartamentosOchavadaFront.git
+   ```
+   ```bash
+   git clone github-infra:jaimejimenezrmr-jpg/ApartamentosOchavadaInfra.git
+   ```
+   La primera vez SSH pregunta si confía en github.com: compruebe que la huella mostrada es
+   `SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU` (la publicada por GitHub para ED25519) y responda `yes`.
+
+   Si un `git clone` responde *Permission denied* o *Repository not found*, la clave de ese repositorio no está
+   añadida en su Deploy keys (o se pegó en otro repositorio).
 
 ## Fase F · Configuración
 
