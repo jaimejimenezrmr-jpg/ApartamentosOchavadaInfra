@@ -1,0 +1,164 @@
+# =====================================================================================
+# Apartamentos Ochavada · producción
+#
+#   Internet → Cloudflare → caddy (80/443) ─┬─ /api/* → backend:8080 ── postgres:5432
+#                                           └─ resto  → frontend:4000 (SSR) ─→ backend
+#
+# Redes:
+#   edge: caddy, frontend y backend (con salida a internet: Stripe, TTLock, Beds24, SES, SMTP)
+#   data: interna, sin salida a internet; solo backend, postgres y la copia de seguridad
+#
+# Uso:  cp .env.example .env && cp backend.env.example backend.env   (y rellenar)
+#       docker compose up -d --build
+# =====================================================================================
+name: ochavada
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ochavada}
+      POSTGRES_USER: ${POSTGRES_USER:-ochavada}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    networks: [data]
+    logging: *logging
+
+  backend:
+    build:
+      context: ../ApartamentosOchavadaBackend
+    image: ochavada/backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: backend.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ochavada}
+      DB_USERNAME: ${POSTGRES_USER:-ochavada}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_ISSUER: https://${DOMAIN:?Defina DOMAIN en .env}
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      GUEST_PORTAL_URL: https://${DOMAIN}/mi-estancia
+      PROPERTY_ADDRESS: "${PROPERTY_ADDRESS:-Calle Pescaderías, 6, 14920 Aguilar de la Frontera (Córdoba)}"
+      PROPERTY_PHONE: ${PROPERTY_PHONE:-}
+      PROPERTY_EMAIL: ${PROPERTY_EMAIL:-apartamentosochavada@gmail.com}
+    volumes:
+      # Certificados opcionales (p. ej. truststore de SES.HOSPEDAJES): SES_TRUSTSTORE_PATH=/app/secrets/...
+      - ./secrets:/app/secrets:ro
+    tmpfs:
+      - /tmp
+    read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [edge, data]
+    logging: *logging
+    <<: *hardening
+
+  frontend:
+    build:
+      context: ../ApartamentosOchavadaFront
+    image: ochavada/frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://backend:8080
+      NG_ALLOWED_HOSTS: ${DOMAIN}
+      TRUST_PROXY: "true"
+      PROPERTY_NAME: ${PROPERTY_NAME:-Apartamentos Ochavada}
+      PROPERTY_LEGAL_NAME: ${PROPERTY_LEGAL_NAME:-}
+      PROPERTY_TAX_ID: ${PROPERTY_TAX_ID:-}
+      PROPERTY_ADDRESS: "${PROPERTY_ADDRESS:-Calle Pescaderías, 6, 14920 Aguilar de la Frontera (Córdoba)}"
+      PROPERTY_PHONE: ${PROPERTY_PHONE:-}
+      PROPERTY_EMAIL: ${PROPERTY_EMAIL:-apartamentosochavada@gmail.com}
+      PROPERTY_TOURISM_REGISTRY: ${PROPERTY_TOURISM_REGISTRY:-}
+    tmpfs:
+      - /tmp
+    read_only: true
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [edge]
+    logging: *logging
+    <<: *hardening
+
+  caddy:
+    build:
+      context: ./caddy
+    image: ochavada/caddy:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Defina ACME_EMAIL en .env}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?Defina CLOUDFLARE_API_TOKEN en .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    networks: [edge]
+    logging: *logging
+
+  db-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:-ochavada}
+      PGUSER: ${POSTGRES_USER:-ochavada}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HOUR: ${BACKUP_HOUR:-4}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      TZ: Europe/Madrid
+    volumes:
+      - ./backups:/backups
+      - ./scripts:/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [data]
+    logging: *logging
+
+networks:
+  edge: {}
+  data:
+    internal: true
+
+volumes:
+  pgdata: {}
+  caddy_data: {}
+  caddy_config: {}

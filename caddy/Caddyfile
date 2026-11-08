@@ -1,0 +1,82 @@
+# =====================================================================================
+# Proxy inverso de Apartamentos Ochavada
+#   - TLS automático (Let's Encrypt) por reto DNS-01 de Cloudflare
+#   - IP real del cliente desde CF-Connecting-IP, solo si la petición llega desde Cloudflare
+#   - /api/* → backend (Spring Boot) · resto → frontend (Angular SSR)
+# Variables: DOMAIN, ACME_EMAIL, CLOUDFLARE_API_TOKEN
+# =====================================================================================
+{
+	email {$ACME_EMAIL}
+
+	servers {
+		# Rangos de Cloudflare descargados y renovados periódicamente.
+		trusted_proxies cloudflare {
+			interval 12h
+			timeout 15s
+		}
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+(cloudflare_tls) {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		resolvers 1.1.1.1 1.0.0.1
+	}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-X-Powered-By
+	}
+}
+
+www.{$DOMAIN} {
+	import cloudflare_tls
+	import security_headers
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	import cloudflare_tls
+	import security_headers
+	encode zstd gzip
+
+	# Los endpoints de Actuator solo se usan dentro de la red de Docker.
+	@actuator path /actuator /actuator/*
+	respond @actuator 404
+
+	handle /api/* {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy backend:8080 {
+			# Una única IP de cliente, ya validada: el backend la usa para límites de peticiones y auditoría.
+			header_up X-Forwarded-For {client_ip}
+			header_up X-Real-IP {client_ip}
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 60s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:4000 {
+			header_up X-Forwarded-For {client_ip}
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 30s
+			}
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
