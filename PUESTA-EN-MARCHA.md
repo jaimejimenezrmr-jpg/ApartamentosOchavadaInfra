@@ -8,20 +8,20 @@ equipo hasta el lanzamiento público (finales de enero / principios de febrero d
 | Dominio | `apartamentosochavada.com` en **Cloudflare Registrar** (precio de coste) | ~10 $/año |
 | DNS, TLS y protección | **Cloudflare** (plan gratuito) | 0 € |
 | Acceso solo para el equipo | **Cloudflare Zero Trust · Access** (gratis hasta 50 usuarios) | 0 € |
-| Servidor | **OVHcloud VPS-1**: 2 vCores / 4 GB / 40 GB NVMe, Ubuntu 24.04, centro de datos en Francia | desde 4,61 €/mes con IVA (más sin compromiso; confirmar en el pedido) |
-| Copias del servidor | Copia automática diaria **incluida** en el VPS | 0 € |
-| Tráfico | Ilimitado | 0 € |
+| Servidor | **Contabo Cloud VPS 4**: 4 vCPU / 8 GB / 100 GB SSD, Ubuntu 24.04, región Unión Europea (Alemania) | 6,66 €/mes con IVA en contrato mensual (+2,42 € de alta una vez); 5,66 €/mes con 12 meses |
+| Copias del servidor | **Auto Backup** de Contabo (diaria, 10 versiones) | ~2 €/mes (recomendado) |
+| Tráfico | Ilimitado (puerto de 200 Mbit/s) | 0 € |
 | Código | Repositorios **privados** en GitHub | 0 € |
 
-> Por qué OVHcloud y no Google Cloud/Azure: por ~10 €/mes da una máquina que en esas nubes costaría 30–40 € más
-> tráfico, con panel, cortafuegos de red, snapshots y copia diaria. Empresa europea, datos en la UE (RGPD).
-> Hetzner sería equivalente, pero en noviembre de 2026 sus planes compartidos no estaban disponibles.
+> **Por qué Contabo**: en noviembre de 2026 la escasez de memoria RAM dejó sin stock todos los VPS de OVHcloud y
+> los planes compartidos de Hetzner. Contabo tenía disponibilidad y da 8 GB por menos de 7 €/mes, el doble de lo
+> que necesita la aplicación (en marcha ronda 1 GB; los límites de `docker-compose.yml` suman 3,5 GB). Empresa
+> alemana, datos en la UE (RGPD).
 >
-> **Por qué VPS-1**: en noviembre de 2026 los VPS-2 y VPS-3 de OVHcloud estaban agotados. El VPS-1 basta para el
-> equipo y para el arranque: la aplicación en marcha usa unos 2,4 GB (los límites por defecto de
-> `docker-compose.yml`). Lo único más lento es compilar las imágenes en el servidor, que se hace de una en una
-> (fase G). Si al hacer el pedido el VPS-2 vuelve a estar disponible, elíjalo; y si no, cuando haya stock puede
-> **ampliar el VPS-1 a VPS-2 desde el panel, sin reinstalar** (sección «Ampliar el servidor»).
+> A cambio, su CPU es compartida con más clientes, el disco es SSD (no NVMe) y el soporte es más lento: para el
+> equipo y 14 habitaciones sobra. Elija el **contrato mensual**: cuesta 1 € más al mes, pero no le ata si el
+> proveedor no le convence. Cambiar de proveedor es sencillo: todo va en Docker y la base de datos tiene volcado
+> diario (sección «Cambiar de servidor»).
 
 Tiempo estimado: 2–3 horas la primera vez (la emisión de certificados y la primera compilación son lo más lento).
 
@@ -31,9 +31,10 @@ Tiempo estimado: 2–3 horas la primera vez (la emisión de certificados y la pr
 
 1. **Cloudflare**: cree la cuenta en https://dash.cloudflare.com con `apartamentosochavada@gmail.com` y active la
    verificación en dos pasos (My Profile → Authentication).
-2. **OVHcloud**: cree la cuenta en https://www.ovhcloud.com/es-es/ (Mi cuenta → Crear una cuenta) con los datos
-   fiscales del negocio, para que las facturas salgan a su nombre. Puede pedir verificar identidad y método de
-   pago antes de activar el primer pedido. Active la verificación en dos pasos (Mi cuenta → Seguridad).
+2. **Contabo**: la cuenta se crea durante el primer pedido (fase C) con los datos fiscales del negocio, para que
+   las facturas salgan a su nombre. A los clientes nuevos a veces les piden verificar la identidad antes de
+   entregar el servidor. Después active la verificación en dos pasos en el panel de cliente
+   (https://my.contabo.com).
 3. **GitHub**: la cuenta `jaimejimenezrmr-jpg` con los tres repositorios **privados** `ApartamentosOchavadaBackend`,
    `ApartamentosOchavadaFront` y `ApartamentosOchavadaInfra` (ya creados y subidos). Active la verificación en dos
    pasos y compruebe que los tres son privados (Settings → General → Danger Zone → visibilidad).
@@ -63,72 +64,75 @@ Tiempo estimado: 2–3 horas la primera vez (la emisión de certificados y la pr
    ssh-keygen -t ed25519 -C "ochavada-admin"
    ```
    Copie el contenido de `C:\Users\<usuario>\.ssh\id_ed25519.pub`.
-2. **Pedido del VPS**: https://www.ovhcloud.com/es-es/vps/ → **VPS-1** (o VPS-2 si está disponible) → Configurar:
-   - Localización: **Gravelines** o **Estrasburgo** (Francia). Evite la «Local Zone» de Madrid: tiene menos
-     funciones (copias, cortafuegos) y la latencia desde Francia es de pocos milisegundos.
-   - Imagen: **Ubuntu 24.04** (sin aplicaciones preinstaladas).
-   - Clave SSH: pegue la clave pública del paso 1. Así no se envía contraseña por email.
-   - Copia de seguridad automática: compruebe que figura la **diaria incluida**.
-   - Duración: sin compromiso (mensual) o con compromiso de 12 meses si quiere el precio más bajo.
-   - Al terminar, en el panel (**Bare Metal Cloud → Servidores privados virtuales**) anote la IPv4 y, si aparece,
-     la IPv6. Cambie el nombre visible a `ochavada-prod`.
-3. **Cortafuegos de red de OVHcloud** (actúa antes de llegar al servidor, por eso protege también los puertos que
-   publica Docker): panel → **Bare Metal Cloud → Network → Direcciones IP públicas** → en la IPv4 del VPS,
-   «…» → **Crear el Edge Network Firewall** → activarlo y añadir reglas, en este orden de prioridad:
-   - 0 · Autorizar TCP, puerto destino 22, IP origen = su IP fija (si no tiene IP fija, sáltese esta regla y la
-     de cierre del 22; el acceso seguirá limitado a su clave SSH y fail2ban).
-   - 1 · Autorizar TCP, puerto destino 80.
-   - 2 · Autorizar TCP, puerto destino 443.
-   - 3 · Autorizar UDP, puerto destino 443.
-   - 4 · Autorizar TCP con la opción *established* (respuestas a conexiones que inicia el servidor: Docker,
-     Stripe, TTLock, GitHub…).
-   - 5 · Autorizar UDP, puerto origen 53 (respuestas DNS) y 6 · UDP puerto origen 123 (hora, NTP).
-   - 19 · Denegar IPv4 (todo lo demás).
-   (Opcional, más seguro: limitar 80/443 a los rangos de https://www.cloudflare.com/ips/, una regla por rango.)
-
-   Si los nombres de las opciones del panel difieren, lo importante es el resultado: entrada solo a 22 (desde su
-   IP), 80 y 443; respuestas permitidas; todo lo demás denegado. Ese cortafuegos filtra IPv4; por IPv6 solo
-   quedan expuestos 22/80/443 (PostgreSQL y el backend no publican puertos). Si una regla le dejara fuera, entre
-   por la consola **KVM** del panel del VPS y corríjala.
-4. **Primera conexión y endurecimiento** (sustituya `IP` por la IPv4 del servidor). OVHcloud crea el usuario
-   `ubuntu` con `sudo`; root no tiene acceso por SSH:
-   ```bash
-   ssh ubuntu@IP
+2. **Pedido del VPS**: https://contabo.com/es/vps/ → **Cloud VPS 4** → Seleccionar (si le ofrece pasar al
+   Cloud VPS 6, no hace falta) → en el configurador:
+   - Duración del contrato: **1 mes** (o 12 meses si ya lo tiene claro; evite 24 meses: se paga por adelantado).
+   - Región: **Unión Europea** (gratis).
+   - Almacenamiento: 100 GB SSD (el incluido).
+   - Imagen: **Ubuntu** en su versión **24.04**.
+   - **Auto Backup**: recomendado (~2 €/mes).
+   - Red privada, IPv4 adicional, Object Storage y monitorización: no hacen falta.
+   - Contraseña de `root`: genere una **larga y única** y guárdela en su gestor de contraseñas. Solo se usará
+     para la primera conexión; en el paso 4 se desactiva el acceso con contraseña.
+   - Complete datos de cliente y pago. Recibirá un email cuando el servidor esté listo (de minutos a unas horas)
+     con su **IPv4** (y la IPv6). En el panel https://my.contabo.com póngale el nombre `ochavada-prod`.
+3. **Primera conexión con contraseña y alta de su clave** (sustituya `IP` por la IPv4 del servidor). Desde
+   PowerShell en su ordenador, este comando copia su clave pública al servidor (le pedirá la contraseña de root):
+   ```powershell
+   type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@IP "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
    ```
-   Dentro del servidor, abra una sesión de administrador:
-   ```bash
-   sudo -i
+   La primera vez SSH preguntará si confía en el servidor: responda `yes`. Compruebe que ya entra **sin**
+   contraseña:
+   ```powershell
+   ssh root@IP
    ```
+   Si algún día pierde el acceso por SSH, el panel de Contabo tiene una consola **VNC** para entrar al servidor.
+4. **Endurecimiento** (dentro del servidor, como root):
    ```bash
    apt update && apt -y full-upgrade
    adduser ochavada
    usermod -aG sudo ochavada
-   rsync --archive --chown=ochavada:ochavada /home/ubuntu/.ssh /home/ochavada
+   rsync --archive --chown=ochavada:ochavada /root/.ssh /home/ochavada
    ```
-   Solo claves SSH y sin root (el fichero `00-…` tiene prioridad sobre el que deja la imagen de OVHcloud):
+   Solo claves SSH y sin root (el fichero `00-…` tiene prioridad sobre cualquier otro de la imagen):
    ```bash
    printf 'PermitRootLogin no\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/00-ochavada.conf
    sshd -t && systemctl restart ssh
    ```
    ```bash
-   apt -y install unattended-upgrades fail2ban git
+   apt -y install unattended-upgrades fail2ban git ufw
    dpkg-reconfigure -plow unattended-upgrades
    timedatectl set-timezone Europe/Madrid
    ```
-   Memoria de intercambio (imprescindible con 4 GB: la compilación de las imágenes la necesita). Con
-   `swappiness` bajo, el sistema solo la usa cuando falta RAM, no en el día a día:
+   **Cortafuegos** (`ufw`). Sustituya `SU_IP` por la IP pública de su casa u oficina si es fija (la ve en
+   https://ifconfig.me); si no es fija, use la segunda variante, que limita los intentos y se apoya en la clave
+   SSH y fail2ban:
+   ```bash
+   ufw default deny incoming && ufw default allow outgoing
+   ufw allow from SU_IP to any port 22 proto tcp
+   ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp
+   ufw enable
+   ```
+   Variante sin IP fija: en lugar de la segunda línea, `ufw limit 22/tcp`. `ufw enable` pide confirmación
+   (`y`); compruebe después con `ufw status verbose`. Si se equivocara de IP o su IP cambiara y quedara fuera,
+   entre por la consola VNC del panel y ejecute `ufw limit 22/tcp`.
+   Docker gestiona por su cuenta los puertos que publica (en este proyecto solo 80 y 443, que deben estar
+   abiertos); PostgreSQL y el backend no publican ninguno, así que no quedan expuestos.
+
+   Memoria de intercambio (margen para la compilación de las imágenes). Con `swappiness` bajo, el sistema solo la
+   usa cuando falta RAM, no en el día a día:
    ```bash
    fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
    echo '/swapfile none swap sw 0 0' >> /etc/fstab
    echo 'vm.swappiness=10' > /etc/sysctl.d/99-swappiness.conf && sysctl --system
    ```
-   Desde otra terminal compruebe que entra como `ochavada` **antes** de cerrar la sesión de `ubuntu`:
-   ```bash
+   Desde **otra** terminal compruebe que entra como `ochavada` **antes** de cerrar la sesión de root:
+   ```powershell
    ssh ochavada@IP
    ```
-   Ya como `ochavada`, elimine el usuario genérico para dejar un único acceso:
-   ```bash
-   sudo deluser --remove-home ubuntu
+   Y que root ya no puede entrar (debe responder *Permission denied*):
+   ```powershell
+   ssh root@IP
    ```
 5. **Docker** (repositorio oficial):
    ```bash
@@ -224,8 +228,8 @@ Rellene con `nano backend.env`, para el entorno del equipo:
 
 ## Fase G · Arranque
 
-El script de despliegue comprueba la configuración y el disco, compila las imágenes **de una en una** (con 4 GB,
-compilarlas a la vez agota la memoria) y arranca todo esperando a que esté sano:
+El script de despliegue comprueba la configuración y el disco, compila las imágenes **de una en una** (así la
+compilación nunca agota la memoria) y arranca todo esperando a que esté sano:
 ```bash
 bash scripts/deploy.sh --no-pull
 ```
@@ -302,7 +306,7 @@ Hace `git pull` de los tres repositorios, compila de una en una y sustituye los 
 versión anterior sigue atendiendo; el corte es solo el reinicio final (unos segundos). Las migraciones de la base
 de datos se aplican solas al arrancar el backend.
 
-Limpieza mensual de imágenes antiguas y de la caché de compilación (el disco es de 40 GB):
+Limpieza mensual de imágenes antiguas y de la caché de compilación (las compilaciones van llenando el disco):
 ```bash
 docker image prune -f && docker builder prune -f --filter until=720h
 ```
@@ -310,27 +314,28 @@ docker image prune -f && docker builder prune -f --filter until=720h
 df -h /
 ```
 
-Copias: además de la copia automática diaria del VPS (panel de OVHcloud → el VPS → Copia de seguridad
-automática), el servicio `db-backup` deja un volcado diario en `/opt/ochavada/ApartamentosOchavadaInfra/backups`;
-copie ese directorio periódicamente fuera del servidor. Antes de una actualización delicada, haga además un
-**snapshot** manual desde el panel.
+Copias: además del Auto Backup de Contabo (si lo contrató), el servicio `db-backup` deja un volcado diario en
+`/opt/ochavada/ApartamentosOchavadaInfra/backups`; copie ese directorio periódicamente fuera del servidor, por
+ejemplo desde PowerShell en su ordenador:
+```powershell
+scp -r ochavada@IP:/opt/ochavada/ApartamentosOchavadaInfra/backups $env:USERPROFILE\Documents\ochavada-backups
+```
+Antes de una actualización delicada, haga además un **snapshot** manual desde el panel de Contabo (incluye uno).
 
-Memoria: cada contenedor tiene un límite (`mem_limit` en `docker-compose.yml`, unos 2,4 GB en total con los
-valores por defecto). Para ver el consumo real:
+Memoria: cada contenedor tiene un límite (`mem_limit` en `docker-compose.yml`, unos 3,5 GB en total con los
+valores por defecto, pensados para 8 GB). Para ver el consumo real:
 ```bash
 docker stats --no-stream
 ```
 Si un contenedor se reinicia solo y en `docker compose ps` aparece `OOMKilled`, súbale el límite en `.env`
-(`BACKEND_MEM_LIMIT=1536m`, por ejemplo) y aplique con `docker compose up -d`.
+(`BACKEND_MEM_LIMIT=2g`, por ejemplo) y aplique con `docker compose up -d`.
 
-### Ampliar el servidor (VPS-1 → VPS-2)
+### Cambiar de servidor
 
-Cuando haya stock, desde el panel de OVHcloud → el VPS → **Modelo / Cambiar de oferta**: se reinicia con más RAM,
-CPU y disco, conservando datos, IP y configuración (no se puede volver a un modelo inferior). Después:
-1. Amplíe la partición si `df -h /` no muestra el disco nuevo: `sudo growpart /dev/sda 1 && sudo resize2fs /dev/sda1`
-   (compruebe antes el nombre del disco con `lsblk`).
-2. Suba los límites en `.env`: `BACKEND_MEM_LIMIT=1536m`, `POSTGRES_MEM_LIMIT=1g`, `FRONTEND_MEM_LIMIT=512m`,
-   `CADDY_MEM_LIMIT=256m`, `BACKUP_MEM_LIMIT=256m`, y aplique con `docker compose up -d`.
+Si más adelante quiere otro proveedor (o un servidor mayor): prepare el nuevo con las fases C, E y F, copie
+`.env`, `backend.env` y `secrets/` del antiguo, arranque con `bash scripts/deploy.sh --no-pull`, restaure el
+último volcado (cópielo a `backups/` y siga «Restaurar» en el README), cambie la IP en los registros DNS de Cloudflare (fase D) y,
+cuando todo funcione, cancele el servidor antiguo. Gracias al proxy de Cloudflare el cambio de IP es inmediato.
 
 ## Lista de comprobación final
 
@@ -339,5 +344,6 @@ CPU y disco, conservando datos, IP y configuración (no se puede volver a un mod
 - [ ] El backoffice permite entrar con el administrador; las variables `APP_BOOTSTRAP_ADMIN_*` ya están vacías.
 - [ ] Una reserva de prueba con tarjeta de test queda confirmada y llega el email.
 - [ ] `docker compose ps` muestra todo `healthy` y hay un fichero de hoy en `backups/`.
-- [ ] En el panel de OVHcloud la copia automática del VPS figura activa y el Edge Network Firewall está activado.
+- [ ] `sudo ufw status` muestra el cortafuegos activo con 22 (limitado o desde su IP), 80 y 443.
+- [ ] En el panel de Contabo figura el Auto Backup (si lo contrató) y la verificación en dos pasos está activada.
 - [ ] `ssh root@IP` y el acceso con contraseña son rechazados; `ssh ochavada@IP` entra con la clave.

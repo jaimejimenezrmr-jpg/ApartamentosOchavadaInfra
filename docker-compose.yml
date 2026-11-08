@@ -10,12 +10,12 @@
 #
 # Uso:  cp .env.example .env && cp backend.env.example backend.env   (y rellenar)
 #       bash scripts/deploy.sh
-#       (compila las imágenes de una en una: en 4 GB de RAM compilarlas a la vez agota la memoria)
+#       (compila las imágenes de una en una: compilarlas a la vez dispara el consumo de memoria)
 #
-# Memoria (mem_limit): son topes, no reservas. Los valores por defecto son para un VPS de 4 GB
-# (OVHcloud VPS-1) y suman ≈ 2,4 GB, aunque el consumo normal ronda 1 GB. Con más RAM se suben
-# desde .env (*_MEM_LIMIT). El backend usa como heap el 70 % de su límite (MaxRAMPercentage
-# en su Dockerfile) y el frontend un heap de V8 de 256 MB, ambos por debajo de su límite.
+# Memoria (mem_limit): son topes, no reservas. Los valores por defecto son para un VPS de 8 GB
+# (Contabo Cloud VPS 4) y suman ≈ 3,5 GB, aunque el consumo normal ronda 1 GB. En un VPS de
+# 4 GB, bájelos desde .env (*_MEM_LIMIT, valores en .env.example). El backend usa como heap el 70 % de su
+# límite (MaxRAMPercentage en su Dockerfile) y el frontend un heap de V8 de 256 MB.
 # =====================================================================================
 name: ochavada
 
@@ -35,7 +35,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    mem_limit: ${POSTGRES_MEM_LIMIT:-1g}
     shm_size: 128m
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ochavada}
@@ -60,7 +60,7 @@ services:
       context: ../ApartamentosOchavadaBackend
     image: ochavada/backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    mem_limit: ${BACKEND_MEM_LIMIT:-1280m}
+    mem_limit: ${BACKEND_MEM_LIMIT:-1536m}
     env_file: backend.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ochavada}
@@ -92,7 +92,7 @@ services:
       context: ../ApartamentosOchavadaFront
     image: ochavada/frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    mem_limit: ${FRONTEND_MEM_LIMIT:-384m}
+    mem_limit: ${FRONTEND_MEM_LIMIT:-512m}
     environment:
       API_INTERNAL_URL: http://backend:8080
       NG_ALLOWED_HOSTS: ${DOMAIN}
@@ -119,7 +119,7 @@ services:
       context: ./caddy
     image: ochavada/caddy:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    mem_limit: ${CADDY_MEM_LIMIT:-128m}
+    mem_limit: ${CADDY_MEM_LIMIT:-256m}
     environment:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:?Defina ACME_EMAIL en .env}
@@ -148,7 +148,7 @@ services:
   db-backup:
     image: postgres:16-alpine
     restart: unless-stopped
-    mem_limit: ${BACKUP_MEM_LIMIT:-128m}
+    mem_limit: ${BACKUP_MEM_LIMIT:-256m}
     entrypoint: ["/bin/sh", "/scripts/backup.sh"]
     environment:
       PGHOST: postgres
