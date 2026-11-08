@@ -11,7 +11,7 @@ Docker Compose con cinco servicios:
 | `db-backup` | `postgres:16-alpine` | `pg_dump` diario con retención |
 
 ```
-Internet → Cloudflare → caddy :443 ─┬─ /api/*  → backend:8080 ── postgres:5432   (red interna "data")
+Internet ──────────────→ caddy :443 ─┬─ /api/*  → backend:8080 ── postgres:5432   (red interna "data")
                                     └─ resto   → frontend:4000 (SSR) → backend
 ```
 
@@ -19,8 +19,10 @@ Internet → Cloudflare → caddy :443 ─┬─ /api/*  → backend:8080 ──
 - Ningún puerto salvo 80/443 se publica. `/actuator/*` responde 404 desde fuera.
 - Backend y frontend corren sin root, con sistema de ficheros de solo lectura, sin capacidades y con
   `no-new-privileges`. Las imágenes tienen comprobaciones de salud; cada servicio espera a que el anterior esté sano.
-- Caddy solo acepta la IP de `CF-Connecting-IP` si la conexión viene de un rango de Cloudflare (lista actualizada
-  cada 12 h) y se la pasa al backend como única `X-Forwarded-For` (límites de peticiones, auditoría, aperturas).
+- El DNS de Cloudflare está **sin proxy** (los operadores españoles bloquean IPs de Cloudflare durante LaLiga), así que
+  los visitantes conectan directamente con Caddy. Si algún día se activa el proxy, Caddy solo acepta la IP de
+  `CF-Connecting-IP` cuando la conexión viene de un rango de Cloudflare (lista actualizada cada 12 h). En ambos casos
+  pasa al backend una única `X-Forwarded-For` (límites de peticiones, auditoría, aperturas).
 - El frontend envía en cada página una Content-Security-Policy con nonce por petición (sin `unsafe-inline` en
   scripts) y rechaza cabeceras `Host` que no sean el dominio (protección SSRF de Angular).
 
@@ -47,16 +49,16 @@ y `../ApartamentosOchavadaFront`.
 
 - Linux con Docker Engine 24+ y el plugin Compose v2 (BuildKit activado, por defecto).
 - 2 vCPU y 4 GB de RAM como mínimo (la compilación de las imágenes es lo más exigente).
-- Puertos 80 y 443 (TCP y UDP) abiertos. Recomendado: aceptar en el cortafuegos solo los
-  [rangos de Cloudflare](https://www.cloudflare.com/ips/) en esos puertos.
+- Puertos 80 y 443 (TCP y UDP) abiertos a cualquier origen (sin proxy de Cloudflare, los visitantes llegan directos).
 
 ## Cloudflare
 
-1. Registros DNS `A` (y `AAAA` si hay IPv6) para `@` y `www` apuntando al servidor, con el proxy activado (nube naranja).
-2. SSL/TLS → modo **Full (strict)**.
+1. Registros DNS `A` para `@` y `www` apuntando al servidor, **sin proxy** (nube gris): con proxy, la web se
+   bloquea en las redes españolas durante los partidos de LaLiga. `AAAA` solo si el servidor tiene salida IPv6.
+2. SSL/TLS → modo **Full (strict)** (solo cuenta si se activa el proxy).
 3. Token de API (My Profile → API Tokens → plantilla «Edit zone DNS»), limitado a la zona del dominio:
-   es `CLOUDFLARE_API_TOKEN`. Caddy lo usa para el reto DNS-01, así que los certificados se obtienen y renuevan
-   aunque Cloudflare esté delante.
+   es `CLOUDFLARE_API_TOKEN`. Caddy lo usa para el reto DNS-01: los certificados se obtienen y renuevan con o sin
+   proxy.
 
 ## Primer despliegue
 

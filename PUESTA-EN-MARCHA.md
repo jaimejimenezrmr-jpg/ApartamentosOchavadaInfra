@@ -6,8 +6,8 @@ equipo hasta el lanzamiento público (finales de enero / principios de febrero d
 | Pieza | Elección | Coste orientativo |
 |---|---|---|
 | Dominio | `apartamentosochavada.com` en **Cloudflare Registrar** (precio de coste) | ~10 $/año |
-| DNS, TLS y protección | **Cloudflare** (plan gratuito) | 0 € |
-| Acceso solo para el equipo | **Cloudflare Zero Trust · Access** (gratis hasta 50 usuarios) | 0 € |
+| DNS | **Cloudflare** (plan gratuito, solo DNS: sin proxy, ver fase D) | 0 € |
+| HTTPS | Let's Encrypt, obtenido y renovado por Caddy | 0 € |
 | Servidor | **Contabo Cloud VPS 4**: 4 vCPU / 8 GB / 100 GB SSD, Ubuntu 24.04, región Unión Europea (Alemania) | 6,66 €/mes con IVA en contrato mensual (+2,42 € de alta una vez); 5,66 €/mes con 12 meses |
 | Copias del servidor | **Auto Backup** de Contabo (diaria, 10 versiones) | ~2 €/mes (recomendado) |
 | Tráfico | Ilimitado (puerto de 200 Mbit/s) | 0 € |
@@ -51,7 +51,8 @@ Tiempo estimado: 2–3 horas la primera vez (la emisión de certificados y la pr
    (renovación automática activada, privacidad WHOIS incluida).
    - Si prefiriera `.es`: regístrelo en un registrador español (DonDominio, Hostealo…) y en Cloudflare
      **Add a site** → cambie en el registrador los servidores DNS por los dos que le indique Cloudflare.
-2. Cloudflare → el dominio → **SSL/TLS → Overview**: modo **Full (strict)**.
+2. Cloudflare → el dominio → **SSL/TLS → Overview**: modo **Full (strict)** (solo influye si algún día se activa el
+   proxy; sin proxy los visitantes conectan directamente con el certificado de Caddy).
 3. **SSL/TLS → Edge Certificates**: activar *Always Use HTTPS* y *Minimum TLS 1.2*.
 4. **Token para los certificados** (lo usa Caddy): My Profile → API Tokens → Create Token → plantilla
    **Edit zone DNS** → *Zone Resources: Include → Specific zone → apartamentosochavada.com* → crear y **guardar el
@@ -150,14 +151,17 @@ Cloudflare → el dominio → **DNS → Records**:
 
 | Tipo | Nombre | Contenido | Proxy |
 |---|---|---|---|
-| A | `@` | IPv4 del servidor | Activado (nube naranja) |
-| A | `www` | IPv4 del servidor | Activado |
-| AAAA | `@` | IPv6 del servidor | Activado |
-| AAAA | `www` | IPv6 del servidor | Activado |
+| A | `@` | IPv4 del servidor | **Desactivado** (nube gris, «DNS only») |
+| A | `www` | IPv4 del servidor | **Desactivado** |
 
-Los registros AAAA solo si el VPS tiene IPv6 activa (`ip -6 addr show scope global` muestra una dirección y
-`ping -6 -c 3 one.one.one.one` responde). Si no, deje solo los A: Cloudflare sigue sirviendo la web por IPv6 a
-los visitantes.
+**Por qué sin proxy**: en España, los operadores (Movistar, Vodafone, Orange, DIGI, MásMóvil…) bloquean por
+orden judicial direcciones IP compartidas de Cloudflare durante los partidos de LaLiga, y con el proxy activado
+la web deja de abrirse desde esas redes («no se puede conectar de forma segura»). Sin proxy, el dominio apunta a
+la IP propia del servidor, que no se bloquea. Caddy obtiene y renueva su certificado igualmente (reto DNS-01 con
+el token de Cloudflare) y el servidor se protege con `ufw` y fail2ban. Estado de los bloqueos: https://hayahora.futbol
+
+Registros **AAAA** solo si el servidor tiene IPv6 **con salida a internet**: `ping -6 -c 3 one.one.one.one` debe
+responder (tener una dirección IPv6 no basta). En el Cloud VPS de Contabo no la tenía, así que solo hay registros A.
 
 ## Fase E · Código en el servidor
 
@@ -252,6 +256,11 @@ docker compose up -d backend
 
 ## Fase H · Solo para el equipo hasta el lanzamiento (Cloudflare Access)
 
+> **No aplicable con la configuración actual.** Cloudflare Access solo funciona con el proxy de Cloudflare
+> activado, y se desactivó por los bloqueos de LaLiga (fase D). Mientras tanto la web es accesible para cualquiera
+> que conozca la dirección; el backoffice sigue protegido por usuario y contraseña. Si en algún momento vuelve a
+> activar el proxy, estos son los pasos:
+
 1. Cloudflare → **Zero Trust** → elija el plan **Free** (puede pedir un método de pago aunque no cobre).
 2. **Access → Applications → Add an application → Self-hosted**:
    - Dominio: `apartamentosochavada.com` (todo el sitio) y otra entrada para `www.apartamentosochavada.com`.
@@ -294,7 +303,7 @@ En Backoffice → **Usuarios** cree un usuario por persona (nunca cuentas compar
 Al crearlo se muestra una contraseña temporal **una sola vez**: entréguesela en persona o por teléfono. En su primer
 acceso tendrá que elegir la suya. Si alguien deja el equipo, desactívelo (sus sesiones se cierran al momento); si
 pierde el móvil, use «Cerrar sesiones»; si olvida la contraseña, «Resetear contraseña». Recuerde añadir también su
-email en Cloudflare Access (fase H).
+email en Cloudflare Access si lo activa (fase H).
 
 ## Mantenimiento
 
@@ -335,11 +344,12 @@ Si un contenedor se reinicia solo y en `docker compose ps` aparece `OOMKilled`, 
 Si más adelante quiere otro proveedor (o un servidor mayor): prepare el nuevo con las fases C, E y F, copie
 `.env`, `backend.env` y `secrets/` del antiguo, arranque con `bash scripts/deploy.sh --no-pull`, restaure el
 último volcado (cópielo a `backups/` y siga «Restaurar» en el README), cambie la IP en los registros DNS de Cloudflare (fase D) y,
-cuando todo funcione, cancele el servidor antiguo. Gracias al proxy de Cloudflare el cambio de IP es inmediato.
+cuando todo funcione, cancele el servidor antiguo. Los registros tienen TTL de 5 minutos: el cambio de IP llega
+enseguida.
 
 ## Lista de comprobación final
 
-- [ ] `https://apartamentosochavada.com` pide el código de Cloudflare Access y luego muestra la web.
+- [ ] `https://apartamentosochavada.com` se abre con candado también desde datos móviles (en día de partido).
 - [ ] `https://www.apartamentosochavada.com` redirige al dominio principal.
 - [ ] El backoffice permite entrar con el administrador; las variables `APP_BOOTSTRAP_ADMIN_*` ya están vacías.
 - [ ] Una reserva de prueba con tarjeta de test queda confirmada y llega el email.
