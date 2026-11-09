@@ -9,7 +9,8 @@
 set -eu
 
 BACKUP_DIR=/backups
-MEDIA_DIR=/media
+# Ruta que no existe en la imagen: si existiera, Docker copiaría su contenido al volumen al crearlo.
+MEDIA_DIR=/media-archive
 HOUR="${BACKUP_HOUR:-4}"
 RETENTION="${BACKUP_RETENTION_DAYS:-14}"
 

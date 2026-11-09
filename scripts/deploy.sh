@@ -56,6 +56,10 @@ main() {
     docker compose build "$service"
   done
 
+  # El backend corre como usuario 10001: el volumen de fotos debe ser suyo (al crearse, Docker lo deja a root).
+  step "Preparando el volumen de fotos"
+  docker compose run --rm --no-deps --user root --cap-add CHOWN --entrypoint chown backend 10001:10001 /app/data/media
+
   step "Sustituyendo contenedores (espera a que estén sanos, máx. 5 min)"
   if ! docker compose up -d --remove-orphans --wait --wait-timeout 300; then
     docker compose ps

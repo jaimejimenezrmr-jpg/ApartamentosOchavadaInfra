@@ -164,7 +164,7 @@ services:
       - ./backups:/backups
       - ./scripts:/scripts:ro
       # Solo lectura: la copia diaria archiva también las fotos nuevas en backups/media
-      - media:/media:ro
+      - media:/media-archive:ro
     depends_on:
       postgres:
         condition: service_healthy
