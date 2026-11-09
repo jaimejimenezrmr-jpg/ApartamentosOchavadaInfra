@@ -139,8 +139,10 @@ docker compose ps
 ### Copias de seguridad
 
 `db-backup` hace un `pg_dump` cada día a `BACKUP_HOUR` (hora de Madrid), y otro al arrancar si no hay copia de hoy.
-Las copias se guardan en `./backups` durante `BACKUP_RETENTION_DAYS` días. **Copie ese directorio fuera del
-servidor** (otro proveedor o almacenamiento de objetos): una copia en el mismo disco no protege de su pérdida.
+Las copias se guardan en `./backups` durante `BACKUP_RETENTION_DAYS` días. En la misma ejecución, las fotos nuevas
+del centro de operaciones (volumen `media`) se archivan en `./backups/media` (solo se añaden, nunca se borran).
+**Copie ese directorio fuera del servidor** (otro proveedor o almacenamiento de objetos): una copia en el mismo
+disco no protege de su pérdida.
 
 Copia inmediata:
 
@@ -167,5 +169,6 @@ docker compose start backend frontend
 | Volumen | Contenido | ¿Copia? |
 |---|---|---|
 | `pgdata` | Base de datos | Sí (vía `./backups`) |
+| `media` | Fotos de limpiezas, incidencias y objetos olvidados | Sí (vía `./backups/media`) |
 | `caddy_data` | Certificados y claves ACME | Recomendable (evita límites de emisión al reinstalar) |
 | `caddy_config` | Configuración generada por Caddy | No |

@@ -9,6 +9,7 @@
 set -eu
 
 BACKUP_DIR=/backups
+MEDIA_DIR=/media
 HOUR="${BACKUP_HOUR:-4}"
 RETENTION="${BACKUP_RETENTION_DAYS:-14}"
 
@@ -31,6 +32,19 @@ run_backup() {
   fi
   find "$BACKUP_DIR" -name "${PGDATABASE}-*.dump" -type f -mtime +"$RETENTION" -print -delete \
     | while read -r old; do log "Eliminada copia antigua $old"; done
+  archive_media
+}
+
+# Fotos del centro de operaciones (inmutables): se copian a backups/media solo las nuevas. No se borran
+# aunque se eliminen en la aplicación: es un archivo, no un espejo.
+archive_media() {
+  [ -d "$MEDIA_DIR" ] || return 0
+  mkdir -p "$BACKUP_DIR/media"
+  if cp -a -n "$MEDIA_DIR/." "$BACKUP_DIR/media/"; then
+    log "Fotos archivadas ($(du -sh "$BACKUP_DIR/media" | cut -f1))"
+  else
+    log "ERROR: no se pudieron archivar las fotos"
+  fi
 }
 
 seconds_until_next_run() {

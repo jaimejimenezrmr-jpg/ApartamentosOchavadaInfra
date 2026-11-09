@@ -51,7 +51,13 @@ www.{$DOMAIN} {
 	respond @actuator 404
 
 	handle /api/* {
-		request_body {
+		# Fotos del centro de operaciones (el front ya las reduce a ~0,5 MB); el resto de la API, 2 MB.
+		@photos path_regexp ^/api/v1/backoffice/.+/photos$
+		@notPhotos not path_regexp ^/api/v1/backoffice/.+/photos$
+		request_body @photos {
+			max_size 11MB
+		}
+		request_body @notPhotos {
 			max_size 2MB
 		}
 		reverse_proxy backend:8080 {

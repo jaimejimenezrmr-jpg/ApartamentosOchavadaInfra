@@ -77,6 +77,8 @@ services:
     volumes:
       # Certificados opcionales (p. ej. truststore de SES.HOSPEDAJES): SES_TRUSTSTORE_PATH=/app/secrets/...
       - ./secrets:/app/secrets:ro
+      # Fotos del centro de operaciones (limpieza, incidencias, objetos olvidados)
+      - media:/app/data/media
     tmpfs:
       - /tmp
     read_only: true
@@ -161,6 +163,8 @@ services:
     volumes:
       - ./backups:/backups
       - ./scripts:/scripts:ro
+      # Solo lectura: la copia diaria archiva también las fotos nuevas en backups/media
+      - media:/media:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,5 +178,6 @@ networks:
 
 volumes:
   pgdata: {}
+  media: {}
   caddy_data: {}
   caddy_config: {}
