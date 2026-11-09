@@ -74,6 +74,7 @@ services:
       PROPERTY_ADDRESS: "${PROPERTY_ADDRESS:-Calle Pescaderías, 6, 14920 Aguilar de la Frontera (Córdoba)}"
       PROPERTY_PHONE: ${PROPERTY_PHONE:-}
       PROPERTY_EMAIL: ${PROPERTY_EMAIL:-apartamentosochavada@gmail.com}
+      SITE_TEST_MODE: ${SITE_TEST_MODE:-false}
     volumes:
       # Certificados opcionales (p. ej. truststore de SES.HOSPEDAJES): SES_TRUSTSTORE_PATH=/app/secrets/...
       - ./secrets:/app/secrets:ro
@@ -105,6 +106,7 @@ services:
       PROPERTY_ADDRESS: "${PROPERTY_ADDRESS:-Calle Pescaderías, 6, 14920 Aguilar de la Frontera (Córdoba)}"
       PROPERTY_PHONE: ${PROPERTY_PHONE:-}
       PROPERTY_EMAIL: ${PROPERTY_EMAIL:-apartamentosochavada@gmail.com}
+      SITE_TEST_MODE: ${SITE_TEST_MODE:-false}
       PROPERTY_TOURISM_REGISTRY: ${PROPERTY_TOURISM_REGISTRY:-}
     tmpfs:
       - /tmp
